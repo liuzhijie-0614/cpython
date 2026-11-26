@@ -115,6 +115,16 @@ class TestPerfTrampoline(unittest.TestCase):
                 "Address should contain only hex characters",
             )
 
+    @unittest.skipIf(support.check_bolt_optimized(), "fails on BOLT instrumented binaries")
+    def test_trampoline_with_unencodable_name(self):
+        code = """if 1:
+                import sys
+
+                sys.activate_stack_trampoline("perf")
+                eval(compile("pass", "bad\\ud800file", "exec"))
+                """
+        assert_python_ok("-c", code, PYTHON_JIT="0")
+
     def test_trampoline_works_with_forks(self):
         code = """if 1:
                 import os, sys
@@ -131,11 +141,14 @@ class TestPerfTrampoline(unittest.TestCase):
                 def foo():
                     pid = os.fork()
                     if pid == 0:
-                        print(os.getpid())
+                        print(os.getpid(), flush=True)
                         baz_fork()
+                        os._exit(0)
                     else:
                         _, status = os.waitpid(-1, 0)
-                        sys.exit(status)
+                        if os.WIFSIGNALED(status):
+                            sys.exit(1)
+                        sys.exit(os.WEXITSTATUS(status))
 
                 def bar():
                     foo()

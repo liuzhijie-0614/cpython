@@ -818,6 +818,7 @@ MODULE_TIME_TRUE
 MODULE__IO_FALSE
 MODULE__IO_TRUE
 MODULE_BUILDTYPE
+BUILD_VERSION
 TEST_MODULES
 LIBB2_LIBS
 LIBB2_CFLAGS
@@ -1017,6 +1018,7 @@ FREEZE_MODULE
 FREEZE_MODULE_BOOTSTRAP_DEPS
 FREEZE_MODULE_BOOTSTRAP
 PYTHON_FOR_FREEZE
+MODULE_CHECK_COMMAND
 PYTHON_FOR_BUILD
 host_os
 host_vendor
@@ -1131,6 +1133,7 @@ with_openssl_rpath
 with_ssl_default_suites
 with_builtin_hashlib_hashes
 enable_test_modules
+enable_byted_python
 '
       ac_precious_vars='build_alias
 host_alias
@@ -1179,7 +1182,8 @@ CURSES_LIBS
 PANEL_CFLAGS
 PANEL_LIBS
 LIBB2_CFLAGS
-LIBB2_LIBS'
+LIBB2_LIBS
+BUILD_VERSION'
 
 
 # Initialize some variables set by options.
@@ -1839,6 +1843,7 @@ Optional Features:
                           use big digits (30 or 15 bits) for Python longs
                           (default is 30)]
   --disable-test-modules  don't build nor install test modules
+  --enable-byted-python   enable bytedance python MACRO (default is yes)
 
 Optional Packages:
   --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
@@ -2025,6 +2030,8 @@ Some influential environment variables:
   LIBB2_CFLAGS
               C compiler flags for LIBB2, overriding pkg-config
   LIBB2_LIBS  linker flags for LIBB2, overriding pkg-config
+  BUILD_VERSION
+              The SCM build version from environment
 
 Use these variables to override the choices made by `configure' or to help
 it to find libraries and programs with nonstandard names/locations.
@@ -3731,6 +3738,16 @@ fi
 
 
 
+# Module import checks must run with the target interpreter on native builds.
+if test "x$cross_compiling" = xyes
+then :
+  MODULE_CHECK_COMMAND='$(PYTHON_FOR_BUILD) $(srcdir)/Tools/build/check_extension_modules.py --cross-compiling'
+else $as_nop
+  MODULE_CHECK_COMMAND='$(RUNSHARED) ./$(BUILDPYTHON) -E $(srcdir)/Tools/build/check_extension_modules.py --no-cross-compiling'
+
+fi
+
+
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for Python interpreter freezing" >&5
 printf %s "checking for Python interpreter freezing... " >&6; }
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $PYTHON_FOR_FREEZE" >&5
@@ -4703,8 +4720,13 @@ case $host in #(
      ;;
 esac
 
-case $ac_sys_system in #(
-  iOS) :
+case $host in #(
+  *-apple-ios*-simulator) :
+
+    as_fn_append CFLAGS " -mios-simulator-version-min=${IPHONEOS_DEPLOYMENT_TARGET}"
+    as_fn_append LDFLAGS " -mios-simulator-version-min=${IPHONEOS_DEPLOYMENT_TARGET}"
+   ;; #(
+  *-apple-ios*) :
 
     as_fn_append CFLAGS " -mios-version-min=${IPHONEOS_DEPLOYMENT_TARGET}"
     as_fn_append LDFLAGS " -mios-version-min=${IPHONEOS_DEPLOYMENT_TARGET}"
@@ -19381,13 +19403,7 @@ fi
 # header definition prevents usage - autoconf doesn't use the headers), or
 # raise an error if used at runtime. Force these symbols off.
 if test "$ac_sys_system" != "iOS" ; then
-  ac_fn_c_check_func "$LINENO" "dup3" "ac_cv_func_dup3"
-if test "x$ac_cv_func_dup3" = xyes
-then :
-  printf "%s\n" "#define HAVE_DUP3 1" >>confdefs.h
-
-fi
-ac_fn_c_check_func "$LINENO" "getentropy" "ac_cv_func_getentropy"
+  ac_fn_c_check_func "$LINENO" "getentropy" "ac_cv_func_getentropy"
 if test "x$ac_cv_func_getentropy" = xyes
 then :
   printf "%s\n" "#define HAVE_GETENTROPY 1" >>confdefs.h
@@ -19399,16 +19415,28 @@ then :
   printf "%s\n" "#define HAVE_GETGROUPS 1" >>confdefs.h
 
 fi
-ac_fn_c_check_func "$LINENO" "pipe2" "ac_cv_func_pipe2"
-if test "x$ac_cv_func_pipe2" = xyes
-then :
-  printf "%s\n" "#define HAVE_PIPE2 1" >>confdefs.h
-
-fi
 ac_fn_c_check_func "$LINENO" "system" "ac_cv_func_system"
 if test "x$ac_cv_func_system" = xyes
 then :
   printf "%s\n" "#define HAVE_SYSTEM 1" >>confdefs.h
+
+fi
+
+fi
+# In addition, macOS introduced dup3 and pipe2 in macOS 27, late in the
+# lifetime of this version of Python. Rather than adding weaklinking
+# support for them, just continue to ignore them.
+if test "$ac_sys_system" != "iOS" -a "$ac_sys_system" != "Darwin"; then
+  ac_fn_c_check_func "$LINENO" "dup3" "ac_cv_func_dup3"
+if test "x$ac_cv_func_dup3" = xyes
+then :
+  printf "%s\n" "#define HAVE_DUP3 1" >>confdefs.h
+
+fi
+ac_fn_c_check_func "$LINENO" "pipe2" "ac_cv_func_pipe2"
+if test "x$ac_cv_func_pipe2" = xyes
+then :
+  printf "%s\n" "#define HAVE_PIPE2 1" >>confdefs.h
 
 fi
 
@@ -24956,18 +24984,21 @@ LDVERSION='$(VERSION)$(ABIFLAGS)'
 printf "%s\n" "$LDVERSION" >&6; }
 
 # Configure the flags and dependencies used when compiling shared modules.
-# Do not rename LIBPYTHON - it's accessed via sysconfig by package build
-# systems (e.g. Meson) to decide whether to link extension modules against
-# libpython.
 
 
 MODULE_DEPS_SHARED='$(MODULE_DEPS_STATIC) $(EXPORTSYMS)'
+
+# On most platforms, extension modules aren't linked against libpython, so
+# LIBPYTHON must be empty.
 LIBPYTHON=''
 
 # On Android and Cygwin the shared libraries must be linked with libpython.
+# LIBPYTHON is used by python-config, python3.pc, the commands for building the
+# stdlib's own extension modules, and external package build systems via
+# sysconfig, so its value must be suitable for all those contexts.
 if test "$PY_ENABLE_SHARED" = "1" && ( test -n "$ANDROID_API_LEVEL" || test "$MACHDEP" = "cygwin"); then
   MODULE_DEPS_SHARED="$MODULE_DEPS_SHARED \$(LDLIBRARY)"
-  LIBPYTHON="\$(BLDLIBRARY)"
+  LIBPYTHON="-lpython${VERSION}${ABIFLAGS}"
 fi
 
 # On iOS the shared libraries must be linked with the Python framework
@@ -26684,8 +26715,9 @@ fi
 
 
   # Check that we're able to link with crucial curses/panel functions. This
-  # also serves as a fallback in case pkg-config failed.
-  as_fn_append LIBS " $CURSES_LIBS $PANEL_LIBS"
+  # also serves as a fallback in case pkg-config failed. Extension modules are
+  # not linked with LIBS, so exclude it to get the required libraries.
+  LIBS="$CURSES_LIBS $PANEL_LIBS"
   { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for library containing initscr" >&5
 printf %s "checking for library containing initscr... " >&6; }
 if test ${ac_cv_search_initscr+y}
@@ -29327,6 +29359,37 @@ printf "%s\n" "$TEST_MODULES" >&6; }
 # by <Python.h>: it expects other includes and macros to be defined.
 save_CPPFLAGS=$CPPFLAGS
 CPPFLAGS="${BASECPPFLAGS} -I. -I${srcdir}/Include ${CPPFLAGS}"
+
+# Check for --enable-byted-python and inject byted version
+
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for --enable-byted-python" >&5
+printf %s "checking for --enable-byted-python... " >&6; }
+# Check whether --enable-byted-python was given.
+if test ${enable_byted_python+y}
+then :
+  enableval=$enable_byted_python;
+else $as_nop
+  enable_byted_python=yes
+
+fi
+
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $enable_byted_python" >&5
+printf "%s\n" "$enable_byted_python" >&6; }
+
+if test "x$enable_byted_python" = xyes
+then :
+
+  if test "x$BUILD_VERSION" != "x"; then
+    SCM_VERSION="${BUILD_VERSION##*.}"
+
+printf "%s\n" "#define PY_MICRO_BYTEDVERSION $SCM_VERSION" >>confdefs.h
+
+  fi
+
+printf "%s\n" "#define BYTEDANCE_PYTHON 1" >>confdefs.h
+
+
+fi
 
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether libatomic is needed by <pyatomic.h>" >&5
 printf %s "checking whether libatomic is needed by <pyatomic.h>... " >&6; }

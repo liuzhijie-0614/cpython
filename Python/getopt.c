@@ -45,6 +45,10 @@ static const _PyOS_LongOption longopts[] = {
     {L"help-all", 0, 1},
     {L"help-env", 0, 2},
     {L"help-xoptions", 0, 3},
+#ifdef BYTEDANCE_PYTHON
+    {L"BV", 0, 255},
+    {L"byted-version", 0, 255},
+#endif
     {NULL, 0, -1},                     /* sentinel */
 };
 

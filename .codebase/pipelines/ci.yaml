@@ -1,0 +1,86 @@
+# Auto test for CPython 3.13.
+#
+# Pipeline:
+#   1) Run build.sh to build & install CPython 3.13 into /usr/local/python3.13
+#      (build.sh's make_install branch is enabled via IS_DOCKER_ENV=true).
+#   2) Verify bundled packaging / setuptools / wheel versions.
+#   3) Run the official CPython regression test suite against the installed
+#      interpreter, excluding a few unstable network / ssl / forkserver tests.
+name: test_cpython
+trigger:
+  change:
+    types:
+      - create
+      - push
+  manual:
+jobs:
+  build_and_test_cpython_x86_64:
+    runs-on:
+      arch: x86_64
+    image: hub.byted.org/x86_64/compile/bytedance.lang.bookworm.compile_python:1.0.0.17
+    auto-checkout: false
+    working-directory: &build_and_test_cpython_workdir lang/cpython
+    steps: &build_and_test_cpython_steps
+      - uses: actions/setup-consul
+      - uses: actions/checkout
+        inputs:
+          ref: ${{ Event.Change.Target.Branch }}
+      - name: merge source branch
+        commands:
+          - git config user.email "ci@noreply"
+          - git config user.name "CI"
+          - git fetch origin ${{ Event.Change.Source.Branch }}
+          - git merge origin/${{ Event.Change.Source.Branch }} --no-edit
+      - name: print system info
+        commands:
+          - uname -a
+      - name: build and install cpython
+        commands:
+          - export IS_DOCKER_ENV=true
+          - export NCPU=$(getconf _NPROCESSORS_ONLN)
+          - export CPU_RANGE=0-$((NCPU-1))
+          - 'echo "Restricting build CPU affinity to: ${CPU_RANGE}"'
+          - taskset -c ${CPU_RANGE} bash ./build.sh
+          - test -d /usr/local/python3.13
+          - /usr/local/python3.13/bin/python --version
+      - name: verify bundled package versions
+        commands:
+          - export PYTHON_VERSION=3.13
+          - export INSTALLDIR=/usr/local/python${PYTHON_VERSION}
+          - export PATH=${INSTALLDIR}/bin/:$PATH
+          - export VERIFY_DIR=/tmp/verify_packages
+          - rm -rf ${VERIFY_DIR} && mkdir -p ${VERIFY_DIR}
+          - cd ${VERIFY_DIR}
+          - 'python -c "import packaging; assert packaging.__version__ == ''25.0'', f''packaging wheel: {packaging.__version__}''"'
+          - 'python -c "import setuptools; assert setuptools.__version__ == ''80.9.0'', f''setuptools version:{setuptools.__version__}''"'
+          - 'python -c "import wheel; assert wheel.__version__ == ''0.45.1'', f''wheel version:{wheel.__version__}''"'
+          - 'python -c "import setuptools; from wheel.bdist_wheel import bdist_wheel"'
+          - 'python -c "from packaging import version; assert version.parse(''1.0'') < version.parse(''2.0a1''), ''version parse error''"'
+          - 'python -c "from packaging.specifiers import SpecifierSet; spec = SpecifierSet(''>=1.0,<2.0''); assert ''1.5'' in spec and ''2.1'' not in spec, ''spec parse error.''"'
+      - name: run cpython official regression tests
+        commands:
+          - export PYTHON_VERSION=3.13
+          - export INSTALLDIR=/usr/local/python${PYTHON_VERSION}
+          - export PATH=${INSTALLDIR}/bin/:$PATH
+          - export REGRTEST_DIR=/tmp/regrtest_workdir
+          - export SRC_DIR=$(pwd)
+          - rm -rf ${REGRTEST_DIR} && mkdir -p ${REGRTEST_DIR}
+          - cp -r ${SRC_DIR}/Lib/test ${INSTALLDIR}/lib/python${PYTHON_VERSION}/
+          - cp -r ${SRC_DIR}/Lib/idlelib/idle_test ${INSTALLDIR}/lib/python${PYTHON_VERSION}/idlelib
+          - cd ${REGRTEST_DIR}
+          - export NCPU=$(getconf _NPROCESSORS_ONLN)
+          - export CPU_RANGE=0-$((NCPU-1))
+          - 'echo "Restricting CPU affinity to: ${CPU_RANGE}"'
+          - >-
+            taskset -c ${CPU_RANGE}
+            env LD_LIBRARY_PATH=${INSTALLDIR}/lib
+            ${INSTALLDIR}/bin/python3 -m test --slow-ci
+            -x test_urllib2net test_socket test_ssl test_multiprocessing_forkserver
+            test_timeout
+  build_and_test_cpython_aarch64:
+    runs-on:
+      arch: arm64
+    image: hub.byted.org/aarch64/compile/bytedance.lang.bookworm.compile_python:1.0.0.17
+    auto-checkout: false
+    working-directory: *build_and_test_cpython_workdir
+    steps: *build_and_test_cpython_steps

@@ -183,6 +183,14 @@ Options (and corresponding environment variables):\n\
 --help-env: print help about Python environment variables and exit\n\
 --help-xoptions: print help about implementation-specific -X options and exit\n\
 --help-all: print complete help information and exit\n\
+"
+#ifdef BYTEDANCE_PYTHON
+"\
+--BV  : print the Byted version number if this CPython is built from Bytedance\n\
+        with detailed information about the build (also --byted-version)\n\
+"
+#endif
+"\
 \n\
 Arguments:\n\
 file   : program read from script file\n\
@@ -2066,8 +2074,30 @@ config_init_stdio_encoding(PyConfig *config,
 
     /* Choose the default error handler based on the current locale. */
     if (config->stdio_encoding == NULL) {
-        status = config_get_locale_encoding(config, preconfig,
-                                            &config->stdio_encoding);
+#ifdef MS_WINDOWS
+        /* gh-86427: use the console code page.  Only one encoding can be
+           specified, so the output code page is used: it affects two
+           streams of three. */
+        UINT cp = config->legacy_windows_stdio ? GetConsoleOutputCP() : 0;
+        if (cp != 0) {
+            if (cp == CP_UTF8) {
+                status = PyConfig_SetString(config, &config->stdio_encoding,
+                                            L"utf-8");
+            }
+            else {
+                wchar_t encoding[20];
+                swprintf(encoding, Py_ARRAY_LENGTH(encoding), L"cp%u",
+                         (unsigned int)cp);
+                status = PyConfig_SetString(config, &config->stdio_encoding,
+                                            encoding);
+            }
+        }
+        else
+#endif
+        {
+            status = config_get_locale_encoding(config, preconfig,
+                                                &config->stdio_encoding);
+        }
         if (_PyStatus_EXCEPTION(status)) {
             return status;
         }
@@ -2435,6 +2465,9 @@ config_parse_cmdline(PyConfig *config, PyWideStringList *warnoptions,
     PyStatus status;
     const PyWideStringList *argv = &config->argv;
     int print_version = 0;
+#ifdef BYTEDANCE_PYTHON
+    int print_byted_version = 0;
+#endif
     const wchar_t* program = config->program_name;
     if (!program && argv->length >= 1) {
         program = argv->items[0];
@@ -2514,6 +2547,12 @@ config_parse_cmdline(PyConfig *config, PyWideStringList *warnoptions,
             // help-xoptions
             config_xoptions_usage();
             return _PyStatus_EXIT(0);
+
+#ifdef BYTEDANCE_PYTHON
+        case 255:
+            print_byted_version++;
+            break;
+#endif
 
         case 'b':
             config->bytes_warning++;
@@ -2610,6 +2649,13 @@ config_parse_cmdline(PyConfig *config, PyWideStringList *warnoptions,
                 (print_version >= 2) ? Py_GetVersion() : PY_VERSION);
         return _PyStatus_EXIT(0);
     }
+
+#ifdef BYTEDANCE_PYTHON
+    if (print_byted_version) {
+        printf("Python %s\n", Py_GetBytedVersion());
+        return _PyStatus_EXIT(0);
+    }
+#endif
 
     if (config->run_command == NULL && config->run_module == NULL
         && _PyOS_optind < argv->length

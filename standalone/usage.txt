@@ -1,0 +1,34 @@
+Usage: ./build_standalone.sh
+
+The shell entry selects host or container mode, then runs the same Python build flow.
+Prepare the builder first, check tools, connect Docker/Buildx, then build and publish.
+Missing tools must be installed before building. Docker permission failures
+retry the complete build with sudo -n -E; starting a daemon requires root
+and, inside a container, --privileged.
+Environment:
+  CUSTOM_STANDALONE_BUILD_IMAGE   Set true to build in the fixed ICM image (default: disabled)
+  CUSTOM_STANDALONE_WORK_DIR      Standalone work root (default: <cpython-parent>/.cpython-standalone)
+  CUSTOM_STANDALONE_BUILD_BRANCH  Builder Git branch (default: release)
+  CUSTOM_COMPILER_OPTIONS         Build options (default: pgo+lto):
+                                  noopt, debug, pgo, lto, pgo+lto, or any of
+                                  these prefixed with freethreaded+ (free-threaded+
+                                  is also accepted).
+  CUSTOM_INSTALL_REQUIREMENTS     Set true to install requirements.txt (default: disabled)
+  BUILD_VERSION                   Passed to the builder and verified against --BV
+  PYBUILD_RELEASE_TAG             Builder archive tag (default: current UTC timestamp)
+  STANDALONE_OUTPUT_DIR           Uncompressed install tree (default: <cpython>/output)
+
+Host mode requires Python 3; container mode requires Docker and uses Python from the image.
+Source is the CPython checkout containing this script, regardless of the working directory.
+The native x86_64/aarch64 GNU/Linux target is selected automatically.
+The builder is cloned automatically from code.byted.org when absent.
+Existing checkouts switch to the selected branch; tracked local edits are saved in Git stash.
+The builder retains dependencies in build/ and its own archives in dist/.
+The work root contains python-build-standalone/ for the PBS checkout and cache,
+and work/ for temporary build directories. Temporary directories are removed on exit;
+the PBS checkout and dependency cache are retained.
+The final output is a directory. Packages from requirements.txt are installed
+only when CUSTOM_INSTALL_REQUIREMENTS=true.
+PBS runtime tests and installation checks must pass before publication;
+if checks at the final path fail, the previous output is restored.
+See standalone/README.md for setup and verification scope.

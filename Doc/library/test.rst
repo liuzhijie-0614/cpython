@@ -263,7 +263,7 @@ The :mod:`test.support` module defines the following constants:
    :meth:`~socket.socket.recv` and :meth:`~socket.socket.send` methods of
    :class:`socket.socket`.
 
-   Its default value is 5 seconds.
+   Its default value is 10 seconds.
 
    See also :data:`INTERNET_TIMEOUT`.
 
@@ -696,7 +696,7 @@ The :mod:`test.support` module defines the following functions:
 .. decorator:: anticipate_failure(condition)
 
    A decorator to conditionally mark tests with
-   :func:`unittest.expectedFailure`. Any use of this decorator should
+   :deco:`unittest.expectedFailure`. Any use of this decorator should
    have an associated comment identifying the relevant tracker issue.
 
 
@@ -927,7 +927,7 @@ The :mod:`test.support` module defines the following functions:
 
 .. currentmodule:: test.support.isolation
 
-.. decorator:: runInSubprocess()
+.. decorator:: runInSubprocess(*, options=(), env=None, timeout=None)
 
    Decorator that runs the decorated test in a fresh interpreter subprocess, in
    isolation, so that it does not share global or interpreter state with the
@@ -960,6 +960,19 @@ The :mod:`test.support` module defines the following functions:
    :func:`~test.support.requires_resource`, :func:`~test.support.requires`,
    :func:`~test.support.bigmemtest` and the like behave consistently in both
    processes.
+
+   *options* is a sequence of interpreter command line options
+   to run the subprocess with,
+   and *env* is a mapping of environment variables to set in it,
+   on top of the inherited environment.
+   A value of ``None`` in *env* unsets the variable.
+   Note that :option:`-E` and :option:`-I` make the subprocess ignore
+   the ``PYTHON*`` environment variables, including :envvar:`PYTHONPATH`.
+
+   *timeout* is the number of seconds to wait for the subprocess;
+   the test is reported as an error if it does not complete in time.
+   By default there is no timeout,
+   and a hung test is left to the timeout of the test runner.
 
    The test is skipped on platforms without subprocess support.
 

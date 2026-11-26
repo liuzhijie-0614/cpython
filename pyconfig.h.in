@@ -32,6 +32,9 @@
 /* The Android API level. */
 #undef ANDROID_API_LEVEL
 
+/* Define if you want to enable Bytedance Python Macro. */
+#undef BYTEDANCE_PYTHON
+
 /* Define if C doubles are 64-bit IEEE 754 binary format, stored in ARM
    mixed-endian order (byte order 45670123) */
 #undef DOUBLE_IS_ARM_MIXED_ENDIAN_IEEE754
@@ -1692,6 +1695,9 @@
 
 /* Define to 1 if you have the perf trampoline. */
 #undef PY_HAVE_PERF_TRAMPOLINE
+
+/* Python SCM build version */
+#undef PY_MICRO_BYTEDVERSION
 
 /* Define to 1 to build the sqlite module with loadable extensions support. */
 #undef PY_SQLITE_ENABLE_LOAD_EXTENSION
