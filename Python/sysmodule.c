@@ -2964,6 +2964,11 @@ platform -- platform identifier\n\
 prefix -- prefix used to find the Python library\n\
 thread_info -- a named tuple with information about the thread implementation.\n\
 version -- the version of this interpreter as a string\n\
+"
+#ifdef BYTEDANCE_PYTHON
+"byted_version -- the Byted version of this interpreter as a string\n"
+#endif
+"\
 version_info -- version information as a named tuple\n\
 "
 )
@@ -3403,6 +3408,9 @@ _PySys_InitCore(PyThreadState *tstate, PyObject *sysdict)
 #undef COPY_SYS_ATTR
 
     SET_SYS_FROM_STRING("version", Py_GetVersion());
+#ifdef BYTEDANCE_PYTHON
+    SET_SYS_FROM_STRING("byted_version", Py_GetBytedVersion());
+#endif
     SET_SYS("hexversion", PyLong_FromLong(PY_VERSION_HEX));
     SET_SYS("_git", Py_BuildValue("(szz)", "CPython", _Py_gitidentifier(),
                                   _Py_gitversion()));

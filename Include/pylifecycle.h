@@ -52,6 +52,9 @@ int _Py_CheckPython3(void);
 
 /* In their own files */
 PyAPI_FUNC(const char *) Py_GetVersion(void);
+#ifdef BYTEDANCE_PYTHON
+PyAPI_FUNC(const char *) Py_GetBytedVersion(void);
+#endif
 PyAPI_FUNC(const char *) Py_GetPlatform(void);
 PyAPI_FUNC(const char *) Py_GetCopyright(void);
 PyAPI_FUNC(const char *) Py_GetCompiler(void);

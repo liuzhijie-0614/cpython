@@ -816,22 +816,16 @@ def _get_filtered_attrs(member, dest_path, for_data=True):
         if member.islnk() or member.issym():
             if os.path.isabs(member.linkname):
                 raise AbsoluteLinkError(member)
-            # A link member that resolves to the destination directory itself
-            # would replace it with a (sym)link, redirecting the destination
-            # for all subsequent members.
-            if target_path == dest_path:
-                raise OutsideDestinationError(member, target_path)
             normalized = os.path.normpath(member.linkname)
             if normalized != member.linkname:
                 new_attrs['linkname'] = normalized
             if member.issym():
-                # The symlink is created at `name` with trailing separators
-                # stripped, so its target is relative to the directory
-                # containing that path.
-                link_dir = os.path.dirname(name.rstrip('/' + os.sep))
-                target_path = os.path.join(dest_path, link_dir, normalized)
+                target_path = os.path.join(dest_path,
+                                           os.path.dirname(name),
+                                           member.linkname)
             else:
-                target_path = os.path.join(dest_path, normalized)
+                target_path = os.path.join(dest_path,
+                                           member.linkname)
             target_path = os.path.realpath(target_path,
                                            strict=os.path.ALLOW_MISSING)
             if os.path.commonpath([target_path, dest_path]) != dest_path:
@@ -1252,20 +1246,6 @@ class TarInfo(object):
     @classmethod
     def frombuf(cls, buf, encoding, errors):
         """Construct a TarInfo object from a 512 byte bytes object.
-
-        To support the old v7 tar format AREGTYPE headers are
-        transformed to DIRTYPE headers if their name ends in '/'.
-        """
-        return cls._frombuf(buf, encoding, errors)
-
-    @classmethod
-    def _frombuf(cls, buf, encoding, errors, *, dircheck=True):
-        """Construct a TarInfo object from a 512 byte bytes object.
-
-        If ``dircheck`` is set to ``True`` then ``AREGTYPE`` headers will
-        be normalized to ``DIRTYPE`` if the name ends in a trailing slash.
-        ``dircheck`` must be set to ``False`` if this function is called
-        on a follow-up header such as ``GNUTYPE_LONGNAME``.
         """
         if len(buf) == 0:
             raise EmptyHeaderError("empty header")
@@ -1296,7 +1276,7 @@ class TarInfo(object):
 
         # Old V7 tar format represents a directory as a regular
         # file with a trailing slash.
-        if dircheck and obj.type == AREGTYPE and obj.name.endswith("/"):
+        if obj.type == AREGTYPE and obj.name.endswith("/"):
             obj.type = DIRTYPE
 
         # The old GNU sparse format occupies some of the unused
@@ -1331,15 +1311,8 @@ class TarInfo(object):
         """Return the next TarInfo object from TarFile object
            tarfile.
         """
-        return cls._fromtarfile(tarfile)
-
-    @classmethod
-    def _fromtarfile(cls, tarfile, *, dircheck=True):
-        """
-        See dircheck documentation in _frombuf().
-        """
         buf = tarfile.fileobj.read(BLOCKSIZE)
-        obj = cls._frombuf(buf, tarfile.encoding, tarfile.errors, dircheck=dircheck)
+        obj = cls.frombuf(buf, tarfile.encoding, tarfile.errors)
         obj.offset = tarfile.fileobj.tell() - BLOCKSIZE
         return obj._proc_member(tarfile)
 
@@ -1397,7 +1370,7 @@ class TarInfo(object):
 
         # Fetch the next header and process it.
         try:
-            next = self._fromtarfile(tarfile, dircheck=False)
+            next = self.fromtarfile(tarfile)
         except HeaderError as e:
             raise SubsequentHeaderError(str(e)) from None
 
@@ -1532,7 +1505,7 @@ class TarInfo(object):
 
         # Fetch the next header.
         try:
-            next = self._fromtarfile(tarfile, dircheck=False)
+            next = self.fromtarfile(tarfile)
         except HeaderError as e:
             raise SubsequentHeaderError(str(e)) from None
 

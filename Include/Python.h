@@ -37,6 +37,12 @@
 
 #include "pyport.h"
 #include "pymacro.h"
+#ifdef BYTEDANCE_PYTHON
+/* Because pybyted.h uses MACRO Py_STRINGIFY which is defined in pymacro.h,
+   it is better to include pybyted.h after pymacro.h.
+*/
+#include "pybyted.h"
+#endif
 #include "pymath.h"
 #include "pymem.h"
 #include "pytypedefs.h"

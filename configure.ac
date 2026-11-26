@@ -176,6 +176,13 @@ AC_ARG_WITH([build-python],
 )
 AC_SUBST([PYTHON_FOR_BUILD])
 
+# Module import checks must run with the target interpreter on native builds.
+AS_VAR_IF([cross_compiling], [yes],
+  [MODULE_CHECK_COMMAND='$(PYTHON_FOR_BUILD) $(srcdir)/Tools/build/check_extension_modules.py --cross-compiling'],
+  [MODULE_CHECK_COMMAND='$(RUNSHARED) ./$(BUILDPYTHON) -E $(srcdir)/Tools/build/check_extension_modules.py --no-cross-compiling']
+)
+AC_SUBST([MODULE_CHECK_COMMAND])
+
 AC_MSG_CHECKING([for Python interpreter freezing])
 AC_MSG_RESULT([$PYTHON_FOR_FREEZE])
 AC_SUBST([PYTHON_FOR_FREEZE])
@@ -7269,6 +7276,26 @@ AC_ARG_ENABLE([test-modules],
 ])
 AC_MSG_RESULT([$TEST_MODULES])
 AC_SUBST([TEST_MODULES])
+
+# Check for --enable-byted-python and inject byted version
+AC_ARG_VAR([BUILD_VERSION], [The SCM build version from environment])
+AC_MSG_CHECKING([for --enable-byted-python])
+AC_ARG_ENABLE([byted-python],
+  [AS_HELP_STRING(
+    [--enable-byted-python],
+    [enable bytedance python MACRO (default is yes)]
+  )],
+  [], [enable_byted_python=yes]
+)
+AC_MSG_RESULT([$enable_byted_python])
+
+AS_VAR_IF([enable_byted_python], [yes], [
+  if test "x$BUILD_VERSION" != "x"; then
+    SCM_VERSION="${BUILD_VERSION##*.}"
+    AC_DEFINE_UNQUOTED([PY_MICRO_BYTEDVERSION], [$SCM_VERSION], [Python SCM build version])
+  fi
+  AC_DEFINE([BYTEDANCE_PYTHON], [1], [Define if you want to enable Bytedance Python Macro.])
+])
 
 AC_DEFUN([PY_STDLIB_MOD_SET_NA], [
   m4_foreach([mod], [$@], [

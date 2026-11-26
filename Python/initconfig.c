@@ -70,6 +70,14 @@ Options (and corresponding environment variables):\n\
 --help-env: print help about Python environment variables and exit\n\
 --help-xoptions: print help about implementation-specific -X options and exit\n\
 --help-all: print complete help information and exit\n\
+"
+#ifdef BYTEDANCE_PYTHON
+"\
+--BV  : print the Byted version number if this CPython is built from Bytedance\n\
+        with detailed information about the build (also --byted-version)\n\
+"
+#endif
+"\
 \n\
 Arguments:\n\
 file   : program read from script file\n\
@@ -2361,6 +2369,9 @@ config_parse_cmdline(PyConfig *config, PyWideStringList *warnoptions,
     PyStatus status;
     const PyWideStringList *argv = &config->argv;
     int print_version = 0;
+#ifdef BYTEDANCE_PYTHON
+    int print_byted_version = 0;
+#endif
     const wchar_t* program = config->program_name;
     if (!program && argv->length >= 1) {
         program = argv->items[0];
@@ -2440,6 +2451,12 @@ config_parse_cmdline(PyConfig *config, PyWideStringList *warnoptions,
             // help-xoptions
             config_xoptions_usage();
             return _PyStatus_EXIT(0);
+
+#ifdef BYTEDANCE_PYTHON
+        case 255:
+            print_byted_version++;
+            break;
+#endif
 
         case 'b':
             config->bytes_warning++;
@@ -2536,6 +2553,13 @@ config_parse_cmdline(PyConfig *config, PyWideStringList *warnoptions,
                 (print_version >= 2) ? Py_GetVersion() : PY_VERSION);
         return _PyStatus_EXIT(0);
     }
+
+#ifdef BYTEDANCE_PYTHON
+    if (print_byted_version) {
+        printf("Python %s\n", Py_GetBytedVersion());
+        return _PyStatus_EXIT(0);
+    }
+#endif
 
     if (config->run_command == NULL && config->run_module == NULL
         && _PyOS_optind < argv->length

@@ -27,3 +27,25 @@ Py_GetVersion(void)
 
 // Export the Python hex version as a constant.
 const unsigned long Py_Version = PY_VERSION_HEX;
+
+#ifdef BYTEDANCE_PYTHON
+static int initialized_byted = 0;
+static char byted_version[250];
+
+void _Py_InitBytedVersion(void)
+{
+    if (initialized_byted) {
+        return;
+    }
+    initialized_byted = 1;
+    PyOS_snprintf(byted_version, sizeof(byted_version), "%.80s (%.80s) %.80s",
+                  PY_BYTEDVERSION, Py_GetBuildInfo(), Py_GetCompiler());
+}
+
+const char *
+Py_GetBytedVersion(void)
+{
+    _Py_InitBytedVersion();
+    return byted_version;
+}
+#endif
